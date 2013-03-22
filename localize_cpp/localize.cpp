@@ -11,6 +11,7 @@
 #include <utility>
 #include "fmatrix.h"
 #include "vector.h"
+#include <stdlib.h>
 
 using namespace std;
 
@@ -138,86 +139,93 @@ std::vector<int> EstimateFMatrix(const std::vector<Keypoint> &k1,
 }
 
 /* Match the keys */
-vector < pair<int, int> > matchKeys( vector<int> indices, const vector<string>& key_files)
+vector < pair<int, int> > matchKeys( vector<int> indices, const vector<string>& key_files, int ret_cnt)
 {
 
-	float ratio = 0.6;
+    float ratio = 0.7;
 
-	double F[9];
-	int query=indices[0]; // query image index
-	
-	unsigned char **keys = new unsigned char *[indices.size()];
-        int *num_keys = new int[indices.size()];
-	keypt_t** info = new keypt_t*[indices.size()];
-	vector < vector < Keypoint > > KeypointVec;
-	for(int i=0; i < indices.size(); i++)
-	{
+    double F[9];
+    int query=indices[0]; // query image index
+
+    unsigned char **keys = new unsigned char *[indices.size()];
+    int *num_keys = new int[indices.size()];
+    keypt_t** info = new keypt_t*[indices.size()];
+
+    vector < vector < Keypoint > > KeypointVec;
+    for(int i=0; i < ret_cnt; i++)
+    {
         num_keys[i] = ReadKeyFile(key_files[indices[i]].c_str(), keys+i, info+i); // Read Key files
-	
-	// create keypoint vector
-	vector < Keypoint > keypoint_temp;
-	keypt_t* info_t = info[i];
-	unsigned char* key_t = keys[i];
-		
-	for(int j=0;j< num_keys[i]; j++)
-	{
-		keypoint_temp.push_back( Keypoint(info_t[j].x, 
-					info_t[j].y,
-					info_t[j].scale,
-					info_t[j].orient,
-					(short int*) key_t + 128*j
-					));
 
-	}
-	KeypointVec.push_back(keypoint_temp);
-	
-	}
-	// Create the search tree of the query image
-	ANNkd_tree *tree = CreateSearchTree(num_keys[0],keys[0]);	
-	
-	// Create Result vector
-	vector < pair < int, int > > result;
+        // create keypoint vector
+        vector < Keypoint > keypoint_temp;
+        keypt_t* info_t = info[i];
+        unsigned char* key_t = keys[i];
 
-	// Match query image with the rest of the images
-	for(int i=1;i<indices.size(); i++)
-	{
-		// create the tree
-		ANNkd_tree *nn_tree = CreateSearchTree(num_keys[i],keys[i]);
-	
-            std::vector<KeypointMatch> matches =
-                MatchKeys(num_keys[0], keys[0], nn_tree, ratio);
+        for(int j=0;j< num_keys[i]; j++)
+        {
+            keypoint_temp.push_back( Keypoint(info_t[j].x, 
+                        info_t[j].y,
+                        info_t[j].scale,
+                        info_t[j].orient,
+                        (short int*) key_t + 128*j
+                        ));
+
+        }
+        KeypointVec.push_back(keypoint_temp);
+
+    }
+    // Create the search tree of the query image
+    //ANNkd_tree *tree = CreateSearchTree(num_keys[0],keys[0]);	
+
+    // Create Result vector
+    vector < pair < int, int > > result;
+
+    // Match query image with the rest of the images
+    for(int i=1;i<ret_cnt; i++)
+    {
+        // create the tree
+        ANNkd_tree *nn_tree = CreateSearchTree(num_keys[i],keys[i]);
+
+        std::vector<KeypointMatch> matches =
+           MatchKeys(num_keys[0], keys[0], nn_tree, ratio);
 
 
-		if( (int)matches.size() > 16)
-		{
+        if( (int)matches.size() >= 16)
+        {
 
-			
-			// run ransac
-				
-			// normalize x,y locations according to image dimensions
 
-			// TODO: normalize it later, right now run according un normalized constraints
-			const vector<int>& inliers = EstimateFMatrix(KeypointVec[0], KeypointVec[i], matches, 2048, 9.0f, F, false);		
-		// push into result vector
-		result.push_back(make_pair(matches.size(), inliers.size()));
-					
-		}
-		else
-			result.push_back(make_pair(matches.size(), -1));
+            // run ransac
 
-		delete nn_tree;
-	}
+            // normalize x,y locations according to image dimensions
 
-	
-	for(int i=0; i < indices.size(); i++)
-	{
-		delete [] keys[i];
-		delete [] info[i];
-	}
-	delete [] keys;
-	delete [] info;
-	delete tree;
-return result;
+            // TODO: normalize it later, right now run according un normalized constraints
+            const vector<int>& inliers = EstimateFMatrix(KeypointVec[0], KeypointVec[i], matches, 2048, 9.0f, F, false);		
+            // push into result vector
+            result.push_back(make_pair(matches.size(), inliers.size()));
+
+        }
+        else
+        {
+            result.push_back(make_pair(matches.size(), -1));
+         }
+
+
+         annDeallocPts(nn_tree->pts);
+        delete nn_tree;
+    }
+
+
+    for(int i=0; i < ret_cnt; i++)
+    {
+        delete [] keys[i];
+        delete [] info[i];
+    }
+    delete [] keys;
+    delete [] info;
+    //delete tree;
+    delete [] num_keys;
+    KeypointVec.clear();
+    return result;
 }
 
 
@@ -295,13 +303,15 @@ int main(int argc, char* argv[])
 	// Opens the file to write results
 	ofstream f_out(argv[4]);
 	
+    int ret_cnt= strtol(argv[5],NULL,10); // retrieve argv[5] images
+
 	// Match Keys
-	for(int i=0;i<index_file.size(); i++)
+	for(int i=0;i<index_file.size()-1; i++)
 	{	
-		for(int j=0;j<index_file[i].size();j++)
+		for(int j=0;j<ret_cnt;j++)
 			cout << index_file[i][j] << " ";
 		cout << endl;
-		const vector < pair <int, int> >& result = matchKeys(index_file[i],key_files);
+		const vector < pair <int, int> >& result = matchKeys(index_file[i],key_files,ret_cnt);
 
 		for(int j=0;j<result.size(); j++)
 			f_out << result[j].first << " " << result[j].second << " ";
