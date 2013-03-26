@@ -46,8 +46,8 @@ echo 'Using ' $TEST_NUM 'for retrieval'
 cd localize_cpp
 bash compile.sh
 
-rm ../../results/$TEST_NAME/$TEST_NAME.match.$TEST_NUM.ransac
+rm ../../results/$TEST_NAME/$TEST_NAME.geom.match.$TEST_NUM.ransac
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:bundler/lib/
-./localize $TEST_DIR/bundle/key.orig.txt ../../results/$TEST_NAME/$TEST_NAME.bow.200.orig $TEST_DIR/ ../../results/$TEST_NAME/$TEST_NAME.match.$TEST_NUM.ransac $TEST_NUM
+./localize $TEST_DIR/bundle/key.orig.txt ../../results/$TEST_NAME/$TEST_NAME.geom.bow.100.orig $TEST_DIR/ ../../results/$TEST_NAME/$TEST_NAME.geom.match.$TEST_NUM.ransac $TEST_NUM
 cd ..
 

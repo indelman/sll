@@ -1,10 +1,5 @@
-bash localize.sh 1 50
-bash localize.sh 2 50
-bash localize.sh 3 50
-bash localize.sh 4 50
-
-
-bash localize.sh 1 100
-bash localize.sh 2 100
-bash localize.sh 3 100
-bash localize.sh 4 100
+#dataset and attempted images
+bash localize.sh 1 200
+bash localize.sh 2 200
+bash localize.sh 3 200
+bash localize.sh 4 200
