@@ -205,10 +205,10 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
 
         int point_index = poses->getPoint(index, idx2);
 
-        matlab_error << "error_val = [";
-
+//        cout << "INDEX" << index << " " << idx2 << endl;
         if(point_index != -1)
         {
+
                 float X = poses->vertexset[point_index].m_pos[0];
                 float Y = poses->vertexset[point_index].m_pos[1];
                 float Z = poses->vertexset[point_index].m_pos[2];
@@ -246,6 +246,11 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
 
    // estimate error
    double error_dist = actual_trans.dist(point);
+   cam.print("Estimated Camera: ");
+   point.print("Estimated Translation");
+   actual_trans.print("Actual Translation");
+
+  
     cout << "Translation Error " << error_dist << endl;  
     
 
@@ -642,7 +647,8 @@ int main(int argc, char* argv[])
 	char* dir = argv[3]; //directory of the dataset
 	const vector<string>& key_files = readList(argv[1],dir);
 
-    matlab_error.open("../results/result.m");
+    matlab_error.open("../../results/result.m");
+    matlab_error << "error_val = [";
 
     if(strcmp(dir, "../../data/Dubrovnik6K//")==0 || strcmp(dir,"../../data/Rome16K//")==0)
     {
