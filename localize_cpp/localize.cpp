@@ -28,7 +28,7 @@ bundle* poses;
 list< pair <gtsam::Point3, gtsam::Point2> > corr;
 vector < pair <int, int> > dimensions;
 
-list < gtsam::Pose3 > actual_poses;
+vector < gtsam::Pose3 > actual_poses;
 
 //void computeError(
 
@@ -216,17 +216,31 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
         }
     }
 
-
+    if(corr.size() < 6) return;
     // estimate Pose
 
     gtsam::SimpleCamera cam = estimateCamera(corr);
 
     gtsam::Cal3_S2 K = cam.calibration();
+    cout << "Calibration: " << endl;
+    K.print();
     gtsam::Pose3 Pose = cam.pose();
     gtsam::Point3 point = Pose.translation();
     gtsam::Rot3 rot = Pose.rotation();
 
+    
 
+    // actual pose
+    gtsam::Pose3 actual_pose = actual_poses[id];
+    gtsam::Point3 actual_trans = actual_pose.translation();
+    gtsam::Rot3 actual_rot = actual_pose.rotation();
+
+
+   // estimate error
+   double error_dist = actual_trans.dist(point);
+    cout << "Translation Error " << error_dist << endl;  
+    
+     
 
     
 }
