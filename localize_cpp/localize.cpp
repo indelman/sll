@@ -29,6 +29,7 @@ list< pair <gtsam::Point3, gtsam::Point2> > corr;
 vector < pair <int, int> > dimensions;
 
 vector < gtsam::Pose3 > actual_poses;
+map < int, map < int, pair < double, double > > > errors;
 
 //void computeError(
 
@@ -180,10 +181,12 @@ int findNextImage(vector<double> bow_indices)
 }
 
 
+ofstream matlab_error;
+
 void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoint> Keypoint_r, vector<KeypointMatch> matches, vector<int> inliers)
 {
 
-    corr.clear(); // comment it if you want union
+    //corr.clear(); // comment it if you want union
 
     for(int i=0; i<inliers.size(); i++)
     {
@@ -202,13 +205,18 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
 
         int point_index = poses->getPoint(index, idx2);
 
+        matlab_error << "error_val = [";
+
         if(point_index != -1)
         {
-                x0 = x0 - W/2;
-                y0 = H/2 - y0;
                 float X = poses->vertexset[point_index].m_pos[0];
                 float Y = poses->vertexset[point_index].m_pos[1];
                 float Z = poses->vertexset[point_index].m_pos[2];
+
+                matlab_error << x0 << "," << y0 << "," << x1 << "," << y1 << "," << X << "," << Y << "," << Z << ";" << endl; 
+                          
+                x0 = x0 - W/2;
+                y0 = H/2 - y0;
 
                 corr.push_back(make_pair (gtsam::Point3(X,Y,Z), gtsam::Point2(x0,y0)));
 
@@ -253,7 +261,7 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
     double angle_dist = 1 - findAngleProd(dir1, dir2);
 
     cout << "Angular Error " << angle_dist << endl;
-
+    errors[id][index] = make_pair(error_dist, angle_dist); 
     
 }
 
@@ -634,6 +642,8 @@ int main(int argc, char* argv[])
 	char* dir = argv[3]; //directory of the dataset
 	const vector<string>& key_files = readList(argv[1],dir);
 
+    matlab_error.open("../results/result.m");
+
     if(strcmp(dir, "../../data/Dubrovnik6K//")==0 || strcmp(dir,"../../data/Rome16K//")==0)
     {
         estimate_error=1;
@@ -656,7 +666,8 @@ int main(int argc, char* argv[])
 
 	// Match Keys
 	for(int i=0;i<index_file.size()-1; i++)
-	{	
+	{
+        corr.clear();	
 		for(int j=0;j<ret_cnt;j++)
 			cout << index_file[i][j] << " ";
 		cout << endl;
@@ -665,10 +676,39 @@ int main(int argc, char* argv[])
 		for(int j=0;j<result.size(); j++)
 			f_out << result[j].first << " " << result[j].second.first  << " " << result[j].second.second << " ";
 		f_out << endl;
-//        break;
+        break;
 	}
 	f_out.close();
 
+
+    char error_file[256];
+    sprintf(error_file,"%s.error",argv[5]);
+
+    map < int, map < int, pair < double, double > > >::iterator it;
+     map < int, pair < double, double > > ::iterator it_1;
+    ofstream f_error(error_file);
+
+    for(it = errors.begin(); it != errors.end(); it++)
+    {
+       f_error << it->first << " "; 
+
+       for(it_1 = it->second.begin(); it_1 != it->second.end(); it_1++)
+       {
+            f_error << it_1->first << " " << it_1->second.first << " " << it_1->second.second << " "; 
+
+       }
+
+       f_error << endl;
+
+       
+
+    }
+    f_error.close();
+
+    matlab_error << "];" << endl;
+    matlab_error.close();
+
+        
 	
 
 }
