@@ -240,7 +240,19 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
    double error_dist = actual_trans.dist(point);
     cout << "Translation Error " << error_dist << endl;  
     
-     
+
+    // estimate quaternion from Rotation
+    gtsam::Quaternion rotQ = rot.toQuaternion();
+    gtsam::Quaternion actual_rotQ = actual_rot.toQuaternion();
+
+
+    std::vector<double> dir1;
+    std::vector<double> dir2;
+    computeViewingDirection(rotQ.w(), rotQ.x(), rotQ.y(), rotQ.z(), dir1);
+    computeViewingDirection(actual_rotQ.w(), actual_rotQ.x(), actual_rotQ.y(), actual_rotQ.z(),dir2);
+    double angle_dist = 1 - findAngleProd(dir1, dir2);
+
+    cout << "Angular Error " << angle_dist << endl;
 
     
 }
