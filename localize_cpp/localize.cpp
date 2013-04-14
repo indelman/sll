@@ -188,6 +188,10 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
 
     //corr.clear(); // comment it if you want union
 
+    float centx=0, centy=0;
+
+    int count =0;
+    
     for(int i=0; i<inliers.size(); i++)
     {
         int idx1=matches[i].m_idx1;
@@ -218,11 +222,57 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
                 x0 = x0 - W/2;
                 y0 = H/2 - y0;
 
+                centx = centx + x0;
+                centy = centy + y0;
+                count++;                
+
                 corr.push_back(make_pair (gtsam::Point3(X,Y,Z), gtsam::Point2(x0,y0)));
 
 //            corr.push_back
         }
     }
+
+
+
+    float centx_avg = centx*1.0f/(count*1.0f);
+    float centy_avg = centy*1.0f/(count*1.0f);
+    gtsam::Point2 cent_avg(centx_avg, centy_avg);
+    
+    double norm =0;
+
+    double sum_dist =0;
+    list< pair <gtsam::Point3, gtsam::Point2> >::iterator corr_it;
+#if 0
+    for(corr_it=corr.begin(); corr_it != corr.end(); corr_it++)
+    {
+
+        gtsam::Point3 Pt = corr_it->first;
+        gtsam::Point2 pt = corr_it->second;
+        pt = pt - cent_avg;
+        corr_it->second = pt;
+
+        double dist = sqrt(pt.x()*pt.x() + pt.y()*pt.y());
+
+        sum_dist = sum_dist + dist;
+
+    }
+    double avg_dist = sum_dist * 1.0f/count;
+
+    for(corr_it=corr.begin(); corr_it != corr.end(); corr_it++)
+    {
+
+        gtsam::Point3 Pt = corr_it->first;
+        gtsam::Point2 pt = corr_it->second;
+
+        double x = pt.x()/avg_dist;
+        double y = pt.y()/avg_dist;
+
+        corr_it->second = gtsam::Point2(x,y);
+
+    }
+#endif
+
+
 
     if(corr.size() < 6) return;
     // estimate Pose
@@ -249,17 +299,19 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
      cam.print("Estimated Camera: ");
 
     // reprojection error
-    list< pair <gtsam::Point3, gtsam::Point2> >::iterator corr_it;
     for(corr_it=corr.begin(); corr_it != corr.end(); corr_it++)
     {
         gtsam::Point3 Pt = corr_it->first;
         gtsam::Point2 pt = corr_it->second;
-        gtsam::Point2 proj_pt = cam.project_to_camera(Pt);
-        gtsam::Point2 actual_proj_pt = actual_cam.project_to_camera(Pt);
+//        gtsam::Point2 proj_pt = cam.project(Pt);
+       gtsam::Point2 actual_proj_pt = actual_cam.project(Pt);
         
         Pt.print("3D Point");
         pt.print("Actual Point");
-        proj_pt.print("Projected Point"); 
+        gtsam::Point3 trans_pt = actual_pose.transform_to(Pt);
+       
+       trans_pt.print("Transformed Point");
+  //      proj_pt.print("Projected Point"); 
         actual_proj_pt.print("Projected Actual Camera");
        
     }
@@ -559,18 +611,25 @@ void readGT(char* list_in)
          for(int i=0;i<3;i++)
          {
              infile >> t[i];
-             t[i] = -1*t[i];
+//             t[i] = -1*t[i];
          }
 
         
         gtsam::Cal3_S2 calib(K[0],K[0],0,0,0);
          
-        matrix_invert(3, R, R_temp);
-        matrix_product(3,3,3,1,R_temp, t, t_final); 
+  //      matrix_invert(3, R, R_temp);
+    //    matrix_product(3,3,3,1,R_temp, t, t_final); 
+
+        gtsam::Rot3 rot_bundler_raw = gtsam::Rot3(R[0], R[1], R[2], R[3], R[4], R[5], R[6], R[7], R[8]);
+        gtsam::Point3 trans_bundler_raw = gtsam::Point3(t[0], t[1], t[2]);    
+
+        gtsam::Pose3 pose_bundler(
+                (gtsam::Rot3::RzRyRx(M_PI,0,0) * rot_bundler_raw).inverse(),
+                        -(rot_bundler_raw.inverse() * trans_bundler_raw));
+
     
-        gtsam::Rot3 rot = gtsam::Rot3(R[0], R[1], R[2], R[3], R[4], R[5], R[6], R[7], R[8]);
-        gtsam::Point3 point = gtsam::Point3(t_final[0], t_final[1], t_final[2]);    
-        actual_poses.push_back( gtsam::SimpleCamera(gtsam::Pose3(rot, point), calib));
+        //gtsam::Point3 point = gtsam::Point3(t_final[0], t_final[1], t_final[2]);    
+        actual_poses.push_back( gtsam::SimpleCamera(pose_bundler, calib));
 
        
     }
