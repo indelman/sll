@@ -28,7 +28,7 @@ bundle* poses;
 list< pair <gtsam::Point3, gtsam::Point2> > corr;
 vector < pair <int, int> > dimensions;
 
-vector < gtsam::Pose3 > actual_poses;
+vector < gtsam::SimpleCamera > actual_poses;
 map < int, map < int, pair < double, double > > > errors;
 
 //void computeError(
@@ -213,7 +213,7 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
                 float Y = poses->vertexset[point_index].m_pos[1];
                 float Z = poses->vertexset[point_index].m_pos[2];
 
-                matlab_error << x0 << "," << y0 << "," << x1 << "," << y1 << "," << X << "," << Y << "," << Z << ";" << endl; 
+                //matlab_error << x0 << "," << y0 << "," << x1 << "," << y1 << "," << X << "," << Y << "," << Z << ";" << endl; 
                           
                 x0 = x0 - W/2;
                 y0 = H/2 - y0;
@@ -229,6 +229,7 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
 
     gtsam::SimpleCamera cam = estimateCamera(corr);
 
+    // print results
     gtsam::Cal3_S2 K = cam.calibration();
     cout << "Calibration: " << endl;
     K.print();
@@ -239,14 +240,33 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
     
 
     // actual pose
-    gtsam::Pose3 actual_pose = actual_poses[id];
+    gtsam::SimpleCamera actual_cam = actual_poses[id];
+    gtsam::Pose3 actual_pose = actual_cam.pose();
     gtsam::Point3 actual_trans = actual_pose.translation();
     gtsam::Rot3 actual_rot = actual_pose.rotation();
+
+    actual_cam.print("Actual Cam");
+     cam.print("Estimated Camera: ");
+
+    // reprojection error
+    list< pair <gtsam::Point3, gtsam::Point2> >::iterator corr_it;
+    for(corr_it=corr.begin(); corr_it != corr.end(); corr_it++)
+    {
+        gtsam::Point3 Pt = corr_it->first;
+        gtsam::Point2 pt = corr_it->second;
+        gtsam::Point2 proj_pt = cam.project_to_camera(Pt);
+        gtsam::Point2 actual_proj_pt = actual_cam.project_to_camera(Pt);
+        
+        Pt.print("3D Point");
+        pt.print("Actual Point");
+        proj_pt.print("Projected Point"); 
+        actual_proj_pt.print("Projected Actual Camera");
+       
+    }
 
 
    // estimate error
    double error_dist = actual_trans.dist(point);
-   cam.print("Estimated Camera: ");
    point.print("Estimated Translation");
    actual_trans.print("Actual Translation");
 
@@ -526,10 +546,13 @@ void readGT(char* list_in)
 	infile.open (list_in);
     double R[9], t[3], R_temp[9], t_final[3];
     double number;
+    double K[3];
 	while(!infile.eof()) // To get you all the lines.
 	{
 
-        
+        for(int i=0;i<3;i++)
+           infile >> K[i];
+               
         for(int i=0; i<9; i++)
             infile >> R[i];
 
@@ -540,12 +563,14 @@ void readGT(char* list_in)
          }
 
         
+        gtsam::Cal3_S2 calib(K[0],K[0],0,0,0);
+         
         matrix_invert(3, R, R_temp);
         matrix_product(3,3,3,1,R_temp, t, t_final); 
     
         gtsam::Rot3 rot = gtsam::Rot3(R[0], R[1], R[2], R[3], R[4], R[5], R[6], R[7], R[8]);
         gtsam::Point3 point = gtsam::Point3(t_final[0], t_final[1], t_final[2]);    
-        actual_poses.push_back( gtsam::Pose3(rot, point));
+        actual_poses.push_back( gtsam::SimpleCamera(gtsam::Pose3(rot, point), calib));
 
        
     }
@@ -647,8 +672,8 @@ int main(int argc, char* argv[])
 	char* dir = argv[3]; //directory of the dataset
 	const vector<string>& key_files = readList(argv[1],dir);
 
-    matlab_error.open("../../results/result.m");
-    matlab_error << "error_val = [";
+  //  matlab_error.open("../../results/result.m");
+  //  matlab_error << "error_val = [";
 
     if(strcmp(dir, "../../data/Dubrovnik6K//")==0 || strcmp(dir,"../../data/Rome16K//")==0)
     {
@@ -711,8 +736,8 @@ int main(int argc, char* argv[])
     }
     f_error.close();
 
-    matlab_error << "];" << endl;
-    matlab_error.close();
+//    matlab_error << "];" << endl;
+  //  matlab_error.close();
 
         
 	
