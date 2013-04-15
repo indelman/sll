@@ -15,7 +15,7 @@
 #include "compute_scores.h"
 #include "gtsam/geometry/SimpleCamera.h"
 #include "ransac/estimateCamera.h"
-
+#include "RANSAC.hh"
 #include "matrix.h"
 //#include "gtsam
 
@@ -26,10 +26,27 @@ vector < vector <double> > bow_index;
 vector < vector <int> > db_index;
 bundle* poses;
 list< pair <gtsam::Point3, gtsam::Point2> > corr;
+
+vector<float> point_x;
+vector<float> point_X;
+
 vector < pair <int, int> > dimensions;
 
 vector < gtsam::SimpleCamera > actual_poses;
 map < int, map < int, pair < double, double > > > errors;
+
+
+uint32_t minimal_RANSAC_solution = 12;
+// SIFT-ratio value. Since we store squared distances, we need the squared value 0.7^2 = 0.49
+float nn_ratio = 0.49f;
+
+// the assumed minimal inlier ratio of RANSAC
+float min_inlier = 0.2f;
+
+// stop RANSAC if 60 seconds have passed
+double ransac_max_time = 300.0;
+
+std::vector< uint32_t > inlier;
 
 //void computeError(
 
@@ -167,17 +184,55 @@ int findNextImage(vector<double> bow_indices)
 //        cout << bow_indices[i] << " ";
          if( bow_indices[i] !=-1 && bow_indices[i] < min)
          {
-         
+
              min = bow_indices[i];
              index = i;
          }
     }
 
-//    cout << endl << "----------------------------" << endl;
+    //    cout << endl << "----------------------------" << endl;
 
     cout << "Min: " << min << " Index: " << index << endl;
     if(index == -1)return -1;
     return index;
+}
+
+
+float x_c[3];
+void computeErrorRANSAC()
+{
+
+    inlier.clear();
+    uint32_t nb_corr = point_x.size() / 2;
+
+    double ransac_max_time = 60.0;
+    RANSAC::computation_type = P6pt;
+    RANSAC::stop_after_n_secs = true;
+    RANSAC::max_time = ransac_max_time;
+    RANSAC::error = 10.0f; // for P6pt this is the SQUARED reprojection error in pixels
+    RANSAC ransac_solver;
+    ransac_solver.apply_RANSAC( point_x, point_X, nb_corr, std::max( float( minimal_RANSAC_solution ) / float( nb_corr ), min_inlier ) );
+
+    inlier.assign( ransac_solver.get_inliers().begin(), ransac_solver.get_inliers().end()  );
+
+    vector < float > scaled_x;
+    vector < float > scaled_X;
+
+    float n = 1.0;
+
+        Util::Math::ProjMatrix proj_matrix = ransac_solver.get_projection_matrix();
+
+        // decompose the projection matrix
+        Util::Math::Matrix3x3 Rot, K;
+        proj_matrix.decompose( K, Rot );
+        proj_matrix.computeInverse();
+        proj_matrix.computeCenter();
+        x_c[0] = proj_matrix.m_center[0];
+        x_c[1] = proj_matrix.m_center[1];
+        x_c[2] = proj_matrix.m_center[2];
+
+
+
 }
 
 
@@ -187,7 +242,9 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
 {
 
     //corr.clear(); // comment it if you want union
-
+    //point_x.clear(); 
+    //point_X.clear();
+    
     float centx=0, centy=0;
 
     int count =0;
@@ -227,6 +284,13 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
                 count++;                
 
                 corr.push_back(make_pair (gtsam::Point3(X,Y,Z), gtsam::Point2(x0,y0)));
+
+                point_x.push_back(x0);
+                point_x.push_back(y0);
+
+                point_X.push_back(X);
+                point_X.push_back(Y);
+                point_X.push_back(Z);
 
 //            corr.push_back
         }
@@ -276,8 +340,13 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
 
     if(corr.size() < 6) return;
     // estimate Pose
-
     gtsam::SimpleCamera cam = estimateCamera(corr);
+
+    //using RANSAC
+    computeErrorRANSAC();
+
+    cout << "RANSAC Translation " << x_c[0] << " " <<x_c[1] << " " <<x_c[2] << endl;
+
 
     // print results
     gtsam::Cal3_S2 K = cam.calibration();
@@ -303,15 +372,18 @@ void computeError(int id, int index, vector<Keypoint> Keypoint_q, vector<Keypoin
     {
         gtsam::Point3 Pt = corr_it->first;
         gtsam::Point2 pt = corr_it->second;
-//        gtsam::Point2 proj_pt = cam.project(Pt);
-       gtsam::Point2 actual_proj_pt = actual_cam.project(Pt);
+       gtsam::Point2 actual_proj_pt_raw  = actual_cam.project(Pt);
+
+       gtsam::Point2 actual_proj_pt = gtsam::Point2(actual_proj_pt_raw.x(), -actual_proj_pt_raw.y());
         
         Pt.print("3D Point");
         pt.print("Actual Point");
-        gtsam::Point3 trans_pt = actual_pose.transform_to(Pt);
-       
-       trans_pt.print("Transformed Point");
-  //      proj_pt.print("Projected Point"); 
+      
+        if(Pose.transform_to(Pt).z() >=0)
+            {
+        gtsam::Point2 proj_pt = cam.project(Pt);
+        proj_pt.print("Projected Point"); 
+            }
         actual_proj_pt.print("Projected Actual Camera");
        
     }
